@@ -378,6 +378,13 @@ fn farthest(p: &Puzzle, solved: State, limit: usize, rng: &mut Rng) -> Option<(S
         .filter(|&i| dist[i] != u32::MAX)
         .map(|i| dist[i])
         .max()?;
-    let candidates: Vec<usize> = (0..expanded).filter(|&i| dist[i] == best).collect();
+    // Among the hardest, prefer the red car as far from the exit as possible.
+    let far = (0..expanded)
+        .filter(|&i| dist[i] == best)
+        .map(|i| Puzzle::pos(states[i], 0))
+        .min()?;
+    let candidates: Vec<usize> = (0..expanded)
+        .filter(|&i| dist[i] == best && Puzzle::pos(states[i], 0) == far)
+        .collect();
     Some((states[candidates[rng.below(candidates.len())]], best))
 }
