@@ -25,9 +25,10 @@ right. The fewer moves you use, the more stars you earn.
 ## Play
 
 ```bash
-# Linux (Fedora) needs:  sudo dnf install libX11-devel libXi-devel mesa-libGL-devel
 cargo run --release -p rush-hour
 ```
+
+No system packages are needed to build: X11/OpenGL are loaded at runtime (any Linux desktop has them).
 
 | Action | Mouse | Keys |
 |---|---|---|

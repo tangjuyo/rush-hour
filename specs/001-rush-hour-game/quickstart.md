@@ -3,10 +3,7 @@
 ## Prerequisites
 
 - Rust stable from https://rustup.rs
-- Linux only: install the development headers for X11 and OpenGL.
-  - Fedora: `sudo dnf install libX11-devel libXi-devel mesa-libGL-devel`
-  - Debian/Ubuntu: `sudo apt install libx11-dev libxi-dev libgl1-mesa-dev`
-- Windows and macOS: no extra packages are needed.
+- No system packages are needed to build. On Linux the binary loads libX11, libXi and libGL at runtime, and any desktop already has them.
 
 ## Play
 
