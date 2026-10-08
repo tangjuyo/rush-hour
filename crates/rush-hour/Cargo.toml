@@ -1,0 +1,13 @@
+[package]
+name = "rush-hour"
+description = "Rush Hour — desktop game"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rush-core = { path = "../rush-core" }
+macroquad = { version = "0.4", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+directories = "6"

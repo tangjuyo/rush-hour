@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = ["crates/rush-core", "crates/rush-hour"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[profile.dev.package."*"]
+# Dependencies (macroquad, solver hot loops) stay fast in debug builds.
+opt-level = 3
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

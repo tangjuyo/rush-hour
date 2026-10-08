@@ -1,0 +1,12 @@
+[package]
+name = "rush-core"
+description = "Pure Rush Hour rules, solver, level format and generator (no dependencies)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[[bin]]
+name = "levelgen"
+path = "src/bin/levelgen.rs"
