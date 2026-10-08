@@ -1,10 +1,10 @@
 //! Play screen: dragging, snapping animation, undo/reset/hint, win sequence.
 
 use crate::draw::{draw_board, draw_vehicle, BoardGeom, VehicleStyle};
+use crate::fx::Confetti;
 use crate::progress::{Progress, Record};
 use crate::theme::*;
 use macroquad::prelude::*;
-use macroquad::rand::gen_range;
 use rush_core::{solver, stars, Board, Challenge, Move, SIZE};
 
 pub enum GameAction {
@@ -22,16 +22,6 @@ struct Drag {
     min: f32,
     max: f32,
     current: f32,
-}
-
-struct Particle {
-    pos: Vec2,
-    vel: Vec2,
-    rot: f32,
-    spin: f32,
-    color: Color,
-    size: f32,
-    life: f32,
 }
 
 struct Win {
@@ -53,7 +43,7 @@ pub struct Game {
     drag: Option<Drag>,
     hint: Option<(Move, f32)>,
     win: Option<Win>,
-    confetti: Vec<Particle>,
+    confetti: Confetti,
     best: Option<Record>,
     time: f32,
     last_move_at: f32,
@@ -78,11 +68,7 @@ fn layout() -> Layout {
     let top = (screen_height() - board) / 2.0;
     Layout {
         s,
-        g: BoardGeom {
-            x: left,
-            y: top,
-            cell,
-        },
+        g: BoardGeom::classic(left, top, cell),
         panel: Rect::new(left + board + pad + gap, top - pad, panel_w, board + 2.0 * pad),
     }
 }
@@ -111,7 +97,7 @@ impl Game {
             drag: None,
             hint: None,
             win: None,
-            confetti: Vec::new(),
+            confetti: Confetti::default(),
             best,
             time: 0.0,
             last_move_at: -10.0,
@@ -229,31 +215,6 @@ impl Game {
         });
     }
 
-    fn burst(&mut self, origin: Vec2, s: f32) {
-        let palette = [
-            hex(0xe63946),
-            hex(0xffd166),
-            hex(0x5dd39e),
-            hex(0x4cc9f0),
-            hex(0xf15bb5),
-            hex(0x9b5de5),
-            hex(0xff9f1c),
-        ];
-        for _ in 0..170 {
-            let angle = gen_range(-3.0f32, -0.25);
-            let speed = gen_range(250.0, 1050.0) * s;
-            self.confetti.push(Particle {
-                pos: origin,
-                vel: vec2(angle.cos() * speed, angle.sin() * speed),
-                rot: gen_range(0.0, std::f32::consts::TAU),
-                spin: gen_range(-14.0, 14.0),
-                color: palette[gen_range(0, palette.len())],
-                size: gen_range(6.0, 13.0) * s,
-                life: gen_range(1.8, 3.2),
-            });
-        }
-    }
-
     pub fn frame(&mut self, fonts: &Fonts, progress: &mut Progress, has_next: bool) -> GameAction {
         let dt = get_frame_time().min(1.0 / 20.0);
         self.time += dt;
@@ -335,17 +296,9 @@ impl Game {
             }
         }
         if do_burst {
-            self.burst(exit_point, s);
+            self.confetti.burst(exit_point, s);
         }
-        for p in &mut self.confetti {
-            p.vel.y += 1500.0 * s * dt;
-            p.vel *= 1.0 - 0.9 * dt;
-            p.pos += p.vel * dt;
-            p.rot += p.spin * dt;
-            p.life -= dt;
-        }
-        self.confetti
-            .retain(|p| p.life > 0.0 && p.pos.y < screen_height() + 40.0);
+        self.confetti.update(dt, s);
 
         // ---- Draw ---------------------------------------------------------
         backdrop();
@@ -396,20 +349,7 @@ impl Game {
         if let GameAction::None = action {
             action = self.draw_panel(fonts, panel, s);
         }
-        for p in &self.confetti {
-            let a = (p.life / 0.6).min(1.0);
-            draw_rectangle_ex(
-                p.pos.x,
-                p.pos.y,
-                p.size,
-                p.size * 0.55,
-                DrawRectangleParams {
-                    offset: vec2(0.5, 0.5),
-                    rotation: p.rot,
-                    color: with_alpha(p.color, a),
-                },
-            );
-        }
+        self.confetti.draw();
         if let Some((msg, at)) = &self.toast {
             let age = self.time - at;
             if age < 1.6 {

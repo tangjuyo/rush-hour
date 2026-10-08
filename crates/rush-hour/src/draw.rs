@@ -11,24 +11,38 @@ pub struct BoardGeom {
     pub x: f32,
     pub y: f32,
     pub cell: f32,
+    /// Cells per side.
+    pub n: u8,
 }
 
 impl BoardGeom {
+    pub fn classic(x: f32, y: f32, cell: f32) -> BoardGeom {
+        BoardGeom { x, y, cell, n: SIZE }
+    }
     pub fn size(&self) -> f32 {
-        self.cell * SIZE as f32
+        self.cell * self.n as f32
     }
     pub fn pad(&self) -> f32 {
         self.cell * 0.26
     }
-    /// Screen rectangle of a vehicle whose along-axis offset is `pos` (cells, fractional).
-    pub fn vehicle_rect(&self, v: &Vehicle, pos: f32) -> Rect {
-        let len = v.length() as f32 * self.cell;
-        let lane = v.lane() as f32 * self.cell;
+    /// Screen rectangle of a piece whose along-axis offset is `pos` (cells, fractional).
+    pub fn piece_rect(&self, horizontal: bool, len: u8, lane: u8, pos: f32) -> Rect {
+        let len = len as f32 * self.cell;
+        let lane = lane as f32 * self.cell;
         let along = pos * self.cell;
-        match v.orientation() {
-            Orientation::Horizontal => Rect::new(self.x + along, self.y + lane, len, self.cell),
-            Orientation::Vertical => Rect::new(self.x + lane, self.y + along, self.cell, len),
+        if horizontal {
+            Rect::new(self.x + along, self.y + lane, len, self.cell)
+        } else {
+            Rect::new(self.x + lane, self.y + along, self.cell, len)
         }
+    }
+    pub fn vehicle_rect(&self, v: &Vehicle, pos: f32) -> Rect {
+        self.piece_rect(
+            v.orientation() == Orientation::Horizontal,
+            v.length(),
+            v.lane(),
+            pos,
+        )
     }
     /// Mouse coordinate along a vehicle's axis.
     pub fn along(&self, o: Orientation, p: Vec2) -> f32 {
@@ -39,8 +53,13 @@ impl BoardGeom {
     }
 }
 
-/// Frame, parking cells, and the animated exit gate.
+/// Frame, parking cells, and the animated exit gate (classic 6×6).
 pub fn draw_board(g: &BoardGeom, time: f32, exit_glow: f32) {
+    draw_grid(g, EXIT_ROW, time, exit_glow);
+}
+
+/// Frame, parking cells, and the animated exit gate for any N×N grid.
+pub fn draw_grid(g: &BoardGeom, exit_row: u8, time: f32, exit_glow: f32) {
     let (s, p) = (g.size(), g.pad());
     let (fx, fy, fw) = (g.x - p, g.y - p, s + 2.0 * p);
     let r = g.cell * 0.32;
@@ -69,15 +88,15 @@ pub fn draw_board(g: &BoardGeom, time: f32, exit_glow: f32) {
     );
 
     // Exit gap through the right frame wall.
-    let ey = g.y + EXIT_ROW as f32 * g.cell;
+    let ey = g.y + exit_row as f32 * g.cell;
     draw_rectangle(g.x + s - 1.0, ey + g.cell * 0.04, p + 2.0, g.cell * 0.92, WELL);
     let glow = with_alpha(EXIT, 0.25 + 0.35 * exit_glow);
     draw_rectangle(g.x + s + p - 3.0, ey + g.cell * 0.04, 3.0, g.cell * 0.92, glow);
 
     // Cells with painted marks.
     let inset = g.cell * 0.05;
-    for row in 0..SIZE {
-        for col in 0..SIZE {
+    for row in 0..g.n {
+        for col in 0..g.n {
             let cx = g.x + col as f32 * g.cell + inset;
             let cy = g.y + row as f32 * g.cell + inset;
             let cw = g.cell - 2.0 * inset;
@@ -133,17 +152,40 @@ impl Default for VehicleStyle {
     }
 }
 
-/// Draws a top-down car or truck. Horizontal vehicles face right
-/// (towards the exit), vertical vehicles face down.
+/// Draws a classic vehicle.
 pub fn draw_vehicle(g: &BoardGeom, v: &Vehicle, pos: f32, style: VehicleStyle) {
-    let full = g.vehicle_rect(v, pos);
+    let horizontal = v.orientation() == Orientation::Horizontal;
+    let look = PieceLook {
+        horizontal,
+        len: v.length(),
+        lane: v.lane(),
+        color: vehicle_color(v.id()),
+        target: v.is_target(),
+    };
+    draw_piece(g, look, pos, style);
+}
+
+/// Everything needed to draw any vehicle.
+#[derive(Clone, Copy)]
+pub struct PieceLook {
+    pub horizontal: bool,
+    pub len: u8,
+    pub lane: u8,
+    pub color: Color,
+    pub target: bool,
+}
+
+/// Draws a top-down car (2), truck (3) or bus (4). Horizontal vehicles face
+/// right (towards the exit), vertical vehicles face down.
+pub fn draw_piece(g: &BoardGeom, look: PieceLook, pos: f32, style: VehicleStyle) {
+    let full = g.piece_rect(look.horizontal, look.len, look.lane, pos);
     let m = g.cell * 0.09;
     let body = Rect::new(full.x + m, full.y + m, full.w - 2.0 * m, full.h - 2.0 * m);
     let lift = style.lift * g.cell * 0.06;
     let a = style.alpha;
-    let base = vehicle_color(v.id());
+    let base = look.color;
     let r = g.cell * 0.2;
-    let horizontal = v.orientation() == Orientation::Horizontal;
+    let horizontal = look.horizontal;
 
     // Maps (along, across) fractions of the body to screen rectangles.
     let part = |a0: f32, a1: f32, c0: f32, c1: f32| -> Rect {
@@ -164,7 +206,7 @@ pub fn draw_vehicle(g: &BoardGeom, v: &Vehicle, pos: f32, style: VehicleStyle) {
         }
     };
     let fill = |rc: Rect, rad: f32, c: Color| rrect(rc.x, rc.y, rc.w, rc.h, rad, with_alpha(c, a));
-    let cells = v.length() as f32;
+    let cells = look.len as f32;
     // Normalise "one cell" along the body so details keep their proportions.
     let u = 1.0 / cells;
 
@@ -201,7 +243,7 @@ pub fn draw_vehicle(g: &BoardGeom, v: &Vehicle, pos: f32, style: VehicleStyle) {
     );
     rrect(body.x, body.y - lift, body.w, body.h, r, with_alpha(base, a));
 
-    if v.length() == 2 {
+    if look.len == 2 {
         // Hood/roof/trunk lines.
         fill(part(0.30, 0.74, 0.14, 0.86), r * 0.7, shade(base, 0.86));
         fill(part(0.36, 0.66, 0.2, 0.8), r * 0.6, shade(base, 1.08));
@@ -213,13 +255,28 @@ pub fn draw_vehicle(g: &BoardGeom, v: &Vehicle, pos: f32, style: VehicleStyle) {
         fill(part(0.92, 0.975, 0.7, 0.88), r * 0.3, hex(0xfff3c4));
         fill(part(0.02, 0.06, 0.14, 0.32), r * 0.2, hex(0x8b1e2b));
         fill(part(0.02, 0.06, 0.68, 0.86), r * 0.2, hex(0x8b1e2b));
-        if v.is_target() {
+        if look.target {
             // Racing stripes.
             fill(part(0.08, 0.30, 0.40, 0.46), 1.0, hex(0xffffff));
             fill(part(0.08, 0.30, 0.54, 0.60), 1.0, hex(0xffffff));
             fill(part(0.76, 0.92, 0.40, 0.46), 1.0, hex(0xffffff));
             fill(part(0.76, 0.92, 0.54, 0.60), 1.0, hex(0xffffff));
         }
+    } else if look.len == 4 {
+        // Bus: long roof with AC units, side windows, big windshield.
+        fill(part(0.03, 0.97, 0.1, 0.9), r * 0.6, shade(base, 1.12));
+        let windows = 7;
+        for k in 0..windows {
+            let a0 = 0.1 + 0.72 * k as f32 / windows as f32;
+            let a1 = a0 + 0.72 / windows as f32 - 0.02;
+            fill(part(a0, a1, 0.12, 0.24), r * 0.2, GLASS);
+            fill(part(a0, a1, 0.76, 0.88), r * 0.2, GLASS);
+        }
+        fill(part(0.3, 0.42, 0.36, 0.64), r * 0.3, shade(base, 0.8));
+        fill(part(0.55, 0.67, 0.36, 0.64), r * 0.3, shade(base, 0.8));
+        fill(part(0.88, 0.95, 0.14, 0.86), r * 0.35, GLASS);
+        fill(part(0.965, 0.99, 0.1, 0.24), r * 0.3, hex(0xfff3c4));
+        fill(part(0.965, 0.99, 0.76, 0.9), r * 0.3, hex(0xfff3c4));
     } else {
         // Truck: cargo box + cab.
         let cab0 = 1.0 - 0.9 * u;

@@ -310,3 +310,264 @@ pub fn button(fonts: &Fonts, rect: Rect, label: &str, hotkey: &str, accent: Colo
 pub fn ui_scale() -> f32 {
     (screen_width() / 1200.0).min(screen_height() / 800.0).max(0.35)
 }
+
+/// Colour of piece `i` in Bot Lab (piece 0 is the red car).
+pub fn piece_color(i: usize, len: u8) -> Color {
+    const CARS: [u32; 11] = [
+        0x8ac926, 0xff9f1c, 0x4cc9f0, 0xf15bb5, 0x9b5de5, 0x2a9d8f, 0xb8c0cc, 0xffd166, 0xa1887f, 0x6a994e,
+        0x3a86ff,
+    ];
+    const TRUCKS: [u32; 5] = [0xffbe0b, 0x8338ec, 0x277da1, 0x43aa8b, 0xf8961e];
+    const BUSES: [u32; 4] = [0x06d6a0, 0xffb703, 0x5e60ce, 0xfb8500];
+    if i == 0 {
+        return vehicle_color('A');
+    }
+    hex(match len {
+        2 => CARS[i % CARS.len()],
+        3 => TRUCKS[i % TRUCKS.len()],
+        _ => BUSES[i % BUSES.len()],
+    })
+}
+
+pub const BOT: Color = hex(0x5ef2ff);
+
+/// Horizontal slider. `value` is normalised to 0..=1. `grabbed` must persist
+/// between frames. Returns true while the value changes.
+pub fn slider(
+    fonts: &Fonts,
+    rect: Rect,
+    label: &str,
+    shown: &str,
+    value: &mut f32,
+    grabbed: &mut bool,
+    accent: Color,
+) -> bool {
+    let m: Vec2 = mouse_position().into();
+    let s = rect.h / 40.0;
+    let track_y = rect.y + rect.h * 0.72;
+    let (x0, x1) = (rect.x + 8.0 * s, rect.right() - 8.0 * s);
+    text(
+        &fonts.ui,
+        label,
+        rect.x,
+        rect.y + rect.h * 0.22,
+        15.0 * s,
+        MUTED,
+        Align::Left,
+    );
+    text(
+        &fonts.ui,
+        shown,
+        rect.right(),
+        rect.y + rect.h * 0.22,
+        15.0 * s,
+        TEXT,
+        Align::Right,
+    );
+    let hit = Rect::new(rect.x, track_y - 12.0 * s, rect.w, 24.0 * s);
+    if is_mouse_button_pressed(MouseButton::Left) && hit.contains(m) {
+        *grabbed = true;
+    }
+    if !is_mouse_button_down(MouseButton::Left) {
+        *grabbed = false;
+    }
+    let mut changed = false;
+    if *grabbed {
+        let v = ((m.x - x0) / (x1 - x0)).clamp(0.0, 1.0);
+        changed = (v - *value).abs() > f32::EPSILON;
+        *value = v;
+    }
+    let th = 6.0 * s;
+    rrect(x0, track_y - th / 2.0, x1 - x0, th, th / 2.0, hex(0x151a26));
+    let kx = x0 + (x1 - x0) * *value;
+    rrect(x0, track_y - th / 2.0, kx - x0, th, th / 2.0, accent);
+    let kr = if *grabbed || hit.contains(m) { 11.0 } else { 9.0 } * s;
+    draw_circle(kx, track_y + 2.0 * s, kr, Color::new(0.0, 0.0, 0.0, 0.35));
+    draw_circle(kx, track_y, kr, TEXT);
+    draw_circle(kx, track_y, kr * 0.45, accent);
+    changed
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Mood {
+    Idle,
+    Busy,
+    Thinking,
+    Found,
+    Optimal,
+    Failed,
+}
+
+/// The Bot Lab robot. `size` is the head width.
+pub fn robot(cx: f32, cy: f32, size: f32, mood: Mood, time: f32) {
+    let u = size / 100.0;
+    let bob = (time * if mood == Mood::Thinking { 7.0 } else { 2.2 }).sin() * 2.5 * u;
+    let cy = cy + bob;
+    let antenna = match mood {
+        Mood::Idle | Mood::Busy => BOT,
+        Mood::Thinking => {
+            if (time * 8.0).sin() > 0.0 {
+                HINT
+            } else {
+                shade(HINT, 0.5)
+            }
+        }
+        Mood::Found => EXIT,
+        Mood::Optimal => STAR_GOLD,
+        Mood::Failed => hex(0xef476f),
+    };
+    let metal = hex(0xd5dde8);
+    let metal_dark = hex(0x9aa6b8);
+    // Antenna.
+    draw_line(cx, cy - 50.0 * u, cx, cy - 72.0 * u, 4.0 * u, metal_dark);
+    draw_circle(cx, cy - 76.0 * u, 12.0 * u, with_alpha(antenna, 0.25));
+    draw_circle(cx, cy - 76.0 * u, 7.0 * u, antenna);
+    // Ears.
+    rrect(
+        cx - 60.0 * u,
+        cy - 18.0 * u,
+        14.0 * u,
+        36.0 * u,
+        5.0 * u,
+        metal_dark,
+    );
+    rrect(
+        cx + 46.0 * u,
+        cy - 18.0 * u,
+        14.0 * u,
+        36.0 * u,
+        5.0 * u,
+        metal_dark,
+    );
+    // Head.
+    soft_shadow(
+        cx - 50.0 * u,
+        cy - 46.0 * u,
+        100.0 * u,
+        92.0 * u,
+        26.0 * u,
+        10.0 * u,
+        0.4,
+    );
+    rrect(
+        cx - 50.0 * u,
+        cy - 42.0 * u,
+        100.0 * u,
+        92.0 * u,
+        26.0 * u,
+        metal_dark,
+    );
+    rrect(cx - 50.0 * u, cy - 50.0 * u, 100.0 * u, 92.0 * u, 26.0 * u, metal);
+    // Face screen.
+    rrect(
+        cx - 38.0 * u,
+        cy - 36.0 * u,
+        76.0 * u,
+        62.0 * u,
+        18.0 * u,
+        hex(0x141a26),
+    );
+    // Eyes.
+    let blink = ((time * 0.7).fract() > 0.96) && mood != Mood::Thinking;
+    let look = match mood {
+        Mood::Thinking => (time * 3.2).sin() * 8.0 * u,
+        _ => (time * 0.6).sin() * 3.0 * u,
+    };
+    let eye_y = cy - 10.0 * u;
+    for side in [-1.0f32, 1.0] {
+        let ex = cx + side * 16.0 * u + look;
+        match mood {
+            Mood::Optimal => star(ex, eye_y, 10.0 * u, STAR_GOLD),
+            Mood::Failed => {
+                draw_line(
+                    ex - 7.0 * u,
+                    eye_y - 2.0 * u,
+                    ex + 7.0 * u,
+                    eye_y + 2.0 * u,
+                    3.5 * u,
+                    BOT,
+                );
+            }
+            _ if blink => {
+                draw_line(ex - 7.0 * u, eye_y, ex + 7.0 * u, eye_y, 3.5 * u, BOT);
+            }
+            _ => {
+                draw_circle(ex, eye_y, 11.0 * u, with_alpha(BOT, 0.18));
+                rrect(ex - 6.0 * u, eye_y - 8.0 * u, 12.0 * u, 16.0 * u, 6.0 * u, BOT);
+            }
+        }
+    }
+    // Mouth.
+    let my = cy + 12.0 * u;
+    match mood {
+        Mood::Found | Mood::Optimal => {
+            for k in 0..7 {
+                let a0 = std::f32::consts::PI * (0.15 + 0.7 * k as f32 / 7.0);
+                let a1 = std::f32::consts::PI * (0.15 + 0.7 * (k + 1) as f32 / 7.0);
+                draw_line(
+                    cx + a0.cos() * 14.0 * u,
+                    my - 6.0 * u + a0.sin() * 10.0 * u,
+                    cx + a1.cos() * 14.0 * u,
+                    my - 6.0 * u + a1.sin() * 10.0 * u,
+                    3.5 * u,
+                    BOT,
+                );
+            }
+        }
+        Mood::Failed => {
+            for k in 0..7 {
+                let a0 = std::f32::consts::PI * (1.15 + 0.7 * k as f32 / 7.0);
+                let a1 = std::f32::consts::PI * (1.15 + 0.7 * (k + 1) as f32 / 7.0);
+                draw_line(
+                    cx + a0.cos() * 12.0 * u,
+                    my + 6.0 * u + a0.sin() * 7.0 * u,
+                    cx + a1.cos() * 12.0 * u,
+                    my + 6.0 * u + a1.sin() * 7.0 * u,
+                    3.5 * u,
+                    BOT,
+                );
+            }
+        }
+        Mood::Thinking | Mood::Busy => {
+            for k in 0..3 {
+                let on = ((time * 4.0) as usize % 3) == k;
+                draw_circle(
+                    cx + (k as f32 - 1.0) * 9.0 * u,
+                    my,
+                    3.0 * u,
+                    with_alpha(BOT, if on { 1.0 } else { 0.35 }),
+                );
+            }
+        }
+        Mood::Idle => {
+            draw_line(cx - 10.0 * u, my, cx + 10.0 * u, my, 3.5 * u, BOT);
+        }
+    }
+}
+
+/// Speech bubble with a tail pointing left. Wraps `msg` on '\n'.
+pub fn speech(fonts: &Fonts, rect: Rect, msg: &str, size: f32) {
+    let r = 16.0 * size / 18.0;
+    rrect(rect.x, rect.y, rect.w, rect.h, r, hex(0x2c3650));
+    let ty = rect.center().y;
+    draw_triangle(
+        vec2(rect.x + 1.0, ty - 9.0 * size / 18.0),
+        vec2(rect.x + 1.0, ty + 9.0 * size / 18.0),
+        vec2(rect.x - 12.0 * size / 18.0, ty + 2.0 * size / 18.0),
+        hex(0x2c3650),
+    );
+    let lines: Vec<&str> = msg.lines().collect();
+    let lh = size * 1.35;
+    let y0 = ty - lh * (lines.len() as f32 - 1.0) / 2.0;
+    for (i, l) in lines.iter().enumerate() {
+        text(
+            &fonts.ui,
+            l,
+            rect.x + 16.0 * size / 18.0,
+            y0 + lh * i as f32,
+            size,
+            TEXT,
+            Align::Left,
+        );
+    }
+}

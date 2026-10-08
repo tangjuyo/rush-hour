@@ -9,6 +9,7 @@ use rush_core::{Challenge, Orientation, Tier, Vehicle};
 pub enum MenuAction {
     None,
     Play(usize),
+    Lab,
 }
 
 pub struct Menu {
@@ -59,11 +60,7 @@ impl Menu {
         let cell = 44.0 * s;
         let car = Vehicle::new('A', Orientation::Horizontal, 2, 0).expect("valid");
         let bob = (self.time * 3.0).sin() * 2.0 * s;
-        let g = BoardGeom {
-            x: sw / 2.0 + tw / 2.0 + 18.0 * s,
-            y: title_y - 2.5 * cell + bob,
-            cell,
-        };
+        let g = BoardGeom::classic(sw / 2.0 + tw / 2.0 + 18.0 * s, title_y - 2.5 * cell + bob, cell);
         draw_vehicle(&g, &car, 0.0, VehicleStyle::default());
         text(
             &fonts.ui,
@@ -226,11 +223,7 @@ impl Menu {
                 Align::Left,
             );
             let cell = 32.0 * s;
-            let g = BoardGeom {
-                x: px + (preview_w - 6.0 * cell) / 2.0,
-                y: py + 104.0 * s,
-                cell,
-            };
+            let g = BoardGeom::classic(px + (preview_w - 6.0 * cell) / 2.0, py + 104.0 * s, cell);
             draw_static(&g, &ch.board, self.time);
             let iy = g.y + g.size() + 36.0 * s;
             text(
@@ -286,6 +279,18 @@ impl Menu {
 
         // ---- Footer ----------------------------------------------------------------
         let fy = y0 + 4.0 * row_h + 18.0 * s;
+        // Bot Lab entry, under the preview panel.
+        let lab_rect = Rect::new(x0 + grid_w + col_gap, fy - 24.0 * s, preview_w, 50.0 * s);
+        if button(fonts, lab_rect, "Bot Lab", "B", BOT, true) || is_key_pressed(KeyCode::B) {
+            action = MenuAction::Lab;
+        }
+        robot(
+            lab_rect.x + preview_w * 0.62,
+            lab_rect.center().y + 3.0 * s,
+            26.0 * s,
+            Mood::Idle,
+            self.time,
+        );
         let total = progress.total_stars();
         star(sw / 2.0 - 70.0 * s, fy, 11.0 * s, STAR_GOLD);
         text(
